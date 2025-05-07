@@ -1,56 +1,38 @@
-require("dotenv").config();
+require("dotenv").config(); // Load variabel dari .env
 const { ethers } = require("ethers");
-const winston = require("winston");
-const chalk = require("chalk");
-const prompts = require("prompts");
+const winston = require("winston"); // Logger
+const chalk = require("chalk"); // Untuk warna di console
+const prompts = require("prompts"); // Untuk prompt input pengguna
 
-// Custom color palette
-const colors = {
-  info: chalk.hex("#00BCD4"), // Cyan for general info
-  success: chalk.hex("#4CAF50"), // Green for success
-  warning: chalk.hex("#FFC107"), // Yellow for warnings
-  error: chalk.hex("#F44336"), // Red for errors
-  header: chalk.hex("#E91E63").bold, // Magenta for headers
-  secondary: chalk.hex("#B0BEC5"), // Gray for secondary info
-};
-
-// Configure logger
+// Konfigurasi logger menggunakan winston
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
-    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    winston.format.timestamp(),
     winston.format.printf(({ timestamp, level, message }) => {
-      const levelColor = {
-        info: colors.info,
-        warn: colors.warning,
-        error: colors.error,
-      }[level] || colors.info;
-      return levelColor(`${timestamp} [${level.toUpperCase()}]: ${message}`);
+      return `${timestamp} [${level.toUpperCase()}]: ${message}`;
     })
   ),
   transports: [new winston.transports.Console()],
 });
 
-// Format wallet address for brevity
-const formatAddress = (address) => `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-// Somnia Network provider
+// Konfigurasi provider untuk Somnia Network
 const provider = new ethers.JsonRpcProvider(
   "https://rpc.ankr.com/somnia_testnet/6e3fd81558cf77b928b06b38e9409b4677b637118114e83364486294d5ff4811"
-);
-const chainId = 50312;
+); // RPC Somnia
+const chainId = 50312; // Somnia chain ID
 
-// Initialize wallet
+// Inisialisasi wallet dari private key di .env
 const privateKey = process.env.PRIVATE_KEY;
 if (!privateKey) {
   throw new Error("PRIVATE_KEY not found in .env file");
 }
 const wallet = new ethers.Wallet(privateKey, provider);
 
-// Explorer URL
-const EXPLORER_URL_SOMNIA = "https://shannon-explorer.somnia.network/tx/";
+// Inisialisasi EXPLORER_URL_SOMNIA
+const EXPLORER_URL_SOMNIA = "https://shannon-explorer.somnia.network/tx/0x";
 
-// Developer recipients
+// Daftar alamat developer untuk RandomTokenSender
 const DEVS_RECIPIENTS = [
   "0xDA1feA7873338F34C6915A44028aA4D9aBA1346B",
   "0x018604C67a7423c03dE3057a49709aaD1D178B85",
@@ -58,7 +40,7 @@ const DEVS_RECIPIENTS = [
   "0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5",
 ];
 
-// Static configuration
+// Konfigurasi statis (menggabungkan konfigurasi dari kedua bot)
 const config = {
   SOMNIA_NETWORK: {
     SOMNIA_TOKEN_SENDER: {
@@ -79,10 +61,10 @@ const config = {
   },
 };
 
-// Static account index
+// Indeks akun statis
 const accountIndex = 1;
 
-// RandomTokenSender class
+// Kelas RandomTokenSender (dari random.js)
 class RandomTokenSender {
   constructor(wallet) {
     this.wallet = wallet;
@@ -92,56 +74,75 @@ class RandomTokenSender {
 
   async sendTokens() {
     try {
-      logger.info(colors.header("=== STT Token Sender Started ==="));
+      console.log(chalk.bgMagenta.white.bold("-------------------[ STT TOKEN SENDER BOT ]-------------------"));
+      let result = true;
 
-      // Check balance
+      // Cek saldo wallet
       const balance = await provider.getBalance(this.wallet.address);
-      const balanceEther = Number(ethers.formatEther(balance));
-      logger.info(colors.info(`Balance: ${balanceEther.toFixed(6)} STT at ${formatAddress(this.wallet.address)}`));
-
       if (balance === 0n) {
-        logger.warn(colors.warning(`No STT balance to send for account ${this.accountIndex}`));
+        logger.warning(chalk.yellow(`? ${this.accountIndex} | No balance to send tokens`));
+        console.log(chalk.yellow(`[WARN] ? No STT balance to send ?`));
         return false;
       }
 
-      // Determine number of transactions
+      logger.info(chalk.green(`? Balance checked: ${ethers.formatEther(balance)} STT`));
+      console.log(
+        chalk.cyan(`[BALANCE] ?? Saldo di ${this.wallet.address}: ${ethers.formatEther(balance)} STT ??`)
+      );
+
+      // Ambil jumlah transaksi dari konfigurasi
       const { minTxs, maxTxs } = this.config.SOMNIA_NETWORK.SOMNIA_TOKEN_SENDER.NUMBER_OF_SENDS;
       const numTransactions = Math.floor(Math.random() * (maxTxs - minTxs + 1)) + minTxs;
-      logger.info(colors.info(`Planning ${numTransactions} STT transactions for account ${this.accountIndex}`));
 
-      let result = true;
+      logger.info(chalk.cyan(`?? ${this.accountIndex} | Planning to send ${numTransactions} transactions`));
+      console.log(chalk.cyan(`[INFO] ?? Planning ${numTransactions} STT send transactions ??`));
+
       for (let i = 0; i < numTransactions; i++) {
-        // Choose recipient
+        // Tentukan penerima berdasarkan peluang
         const devChance = this.config.SOMNIA_NETWORK.SOMNIA_TOKEN_SENDER.SEND_ALL_TO_DEVS_CHANCE;
         let recipient;
+
         if (Math.random() * 100 <= devChance) {
-          recipient = ethers.getAddress(DEVS_RECIPIENTS[Math.floor(Math.random() * DEVS_RECIPIENTS.length)]);
-          logger.info(colors.info(`Tx ${i + 1}/${numTransactions}: Sending to dev wallet ${formatAddress(recipient)}`));
+          recipient = DEVS_RECIPIENTS[Math.floor(Math.random() * DEVS_RECIPIENTS.length)];
+          recipient = ethers.getAddress(recipient);
+          logger.info(
+            chalk.cyan(`?? ${this.accountIndex} | Transaction ${i + 1}/${numTransactions}: Sending to dev wallet ${recipient}`)
+          );
+          console.log(
+            chalk.blue(`[SEND] ?? Transaction ${i + 1}/${numTransactions}: Sending to dev wallet ${recipient} ??`)
+          );
         } else {
           const randomWallet = ethers.Wallet.createRandom();
           recipient = randomWallet.address;
-          logger.info(colors.info(`Tx ${i + 1}/${numTransactions}: Sending to random wallet ${formatAddress(recipient)}`));
+          logger.info(
+            chalk.cyan(`?? ${this.accountIndex} | Transaction ${i + 1}/${numTransactions}: Sending to random wallet ${recipient}`)
+          );
+          console.log(
+            chalk.blue(`[SEND] ?? Transaction ${i + 1}/${numTransactions}: Sending to random wallet ${recipient} ??`)
+          );
         }
 
-        // Send transaction
+        // Kirim transaksi dengan jumlah acak
         result = await this._send(recipient);
 
-        // Pause between transactions
+        // Jeda antar transaksi
         if (i < numTransactions - 1) {
           const pause =
             Math.random() *
               (this.config.SETTINGS.RANDOM_PAUSE_BETWEEN_ACTIONS[1] -
                 this.config.SETTINGS.RANDOM_PAUSE_BETWEEN_ACTIONS[0]) +
             this.config.SETTINGS.RANDOM_PAUSE_BETWEEN_ACTIONS[0];
-          logger.info(colors.secondary(`Pausing ${pause.toFixed(1)}s before next transaction`));
+          logger.info(chalk.cyan(`? ${this.accountIndex} | Waiting ${pause.toFixed(1)} seconds before next transaction...`));
+          console.log(chalk.cyan(`? Waiting for next transaction...`));
           await new Promise((resolve) => setTimeout(resolve, pause * 1000));
         }
       }
 
-      logger.info(colors.header("=== STT Token Sender Completed ==="));
+      console.log(chalk.bgMagenta.white.bold("-------------------[ SEND COMPLETED ]-------------------"));
       return result;
     } catch (e) {
-      logger.error(colors.error(`Send tokens failed for account ${this.accountIndex}: ${e.message}`));
+      logger.error(chalk.red(`? ${this.accountIndex} | Send tokens error: ${e.message}`));
+      console.log(chalk.red(`[ERROR] ? Send bot error: ${e.message} ?`));
       return false;
     }
   }
@@ -161,7 +162,8 @@ class RandomTokenSender {
       const roundedAmount = Math.round(amountEther * 10000) / 10000;
       const amountToSend = ethers.parseEther(roundedAmount.toString()) * 95n / 100n;
 
-      logger.info(colors.info(`Sending ${roundedAmount.toFixed(4)} STT to ${formatAddress(recipient)}`));
+      logger.info(chalk.cyan(`?? ${this.accountIndex} | Starting send ${roundedAmount.toFixed(4)} STT to ${recipient}`));
+      console.log(chalk.blue(`[SEND] ?? Sending ${roundedAmount.toFixed(4)} STT to ${recipient} ??`));
 
       const txData = {
         to: recipient,
@@ -175,10 +177,16 @@ class RandomTokenSender {
       txData.gasLimit = gasLimit;
 
       const tx = await this.wallet.sendTransaction(txData);
-      logger.info(colors.success(`Tx sent: ${tx.hash}`));
+
+      logger.info(chalk.green(`? Transaction sent: ${tx.hash}`));
+      console.log(chalk.green(`[TX] ? Transaction sent, TX Hash: ${tx.hash} ?`));
 
       const receipt = await tx.wait();
-      logger.info(colors.success(`Tx confirmed: ${EXPLORER_URL_SOMNIA}${receipt.transactionHash}`));
+
+      logger.info(
+        chalk.green(`? Successfully sent ${roundedAmount.toFixed(4)} STT to ${recipient}. TX: ${EXPLORER_URL_SOMNIA}${receipt.transactionHash}`)
+      );
+      console.log(chalk.green(`[TX] ? Transaction confirmed: ${EXPLORER_URL_SOMNIA}${receipt.transactionHash} ?`));
       return true;
     } catch (e) {
       const pause = Math.floor(
@@ -187,14 +195,15 @@ class RandomTokenSender {
             this.config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]) +
         this.config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]
       );
-      logger.error(colors.error(`Send failed: ${e.message}. Retrying in ${pause}s`));
+      logger.error(chalk.red(`? ${this.accountIndex} | Send tokens error: ${e.message}. Sleeping ${pause} seconds...`));
+      console.log(chalk.red(`[ERROR] ? Send error: ${e.message} ?`));
       await new Promise((resolve) => setTimeout(resolve, pause * 1000));
       throw e;
     }
   }
 }
 
-// PingPongSwaps class
+// Kelas PingPongSwaps (dari ping.js)
 class PingPongSwaps {
   constructor(wallet) {
     this.wallet = wallet;
@@ -204,18 +213,98 @@ class PingPongSwaps {
 
   async swaps() {
     try {
-      logger.info(colors.header("=== Ping Pong Swap Started ==="));
-
+      console.log(chalk.bgMagenta.white.bold("-------------------[ PING PONG SWAP BOT ]-------------------"));
       const pingTokenAddress = ethers.getAddress("0x33e7fab0a8a5da1a923180989bd617c9c2d1c493");
       const pongTokenAddress = ethers.getAddress("0x9beaA0016c22B646Ac311Ab171270B0ECf23098F");
       const routerAddress = ethers.getAddress("0x6AAC14f090A35EeA150705f72D90E4CDC4a49b2C");
 
       const tokenAbi = [
-        // ... (unchanged token ABI)
+        {
+          name: "balanceOf",
+          inputs: [{ name: "owner", type: "address" }],
+          outputs: [{ name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          name: "approve",
+          inputs: [
+            { name: "spender", type: "address" },
+            { name: "amount", type: "uint256" },
+          ],
+          outputs: [{ name: "", type: "bool" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          name: "allowance",
+          inputs: [
+            { name: "owner", type: "address" },
+            { name: "spender", type: "address" },
+          ],
+          outputs: [{ name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          name: "transfer",
+          inputs: [
+            { name: "to", type: "address" },
+            { name: "value", type: "uint256" },
+          ],
+          outputs: [{ name: "", type: "bool" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          name: "transferFrom",
+          inputs: [
+            { name: "from", type: "address" },
+            { name: "to", type: "address" },
+            { name: "value", type: "uint256" },
+          ],
+          outputs: [{ name: "", type: "bool" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          name: "decimals",
+          inputs: [],
+          outputs: [{ name: "", type: "uint8" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          name: "mint",
+          inputs: [],
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
       ];
 
       const routerAbi = [
-        // ... (unchanged router ABI)
+        {
+          name: "exactInputSingle",
+          inputs: [
+            {
+              name: "params",
+              type: "tuple",
+              components: [
+                { name: "tokenIn", type: "address" },
+                { name: "tokenOut", type: "address" },
+                { name: "fee", type: "uint24" },
+                { name: "recipient", type: "address" },
+                { name: "amountIn", type: "uint256" },
+                { name: "amountOutMinimum", type: "uint256" },
+                { name: "sqrtPriceLimitX96", type: "uint160" },
+              ],
+            },
+          ],
+          outputs: [{ name: "amountOut", type: "uint256" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
       ];
 
       const pingContract = new ethers.Contract(pingTokenAddress, tokenAbi, this.wallet);
@@ -225,21 +314,28 @@ class PingPongSwaps {
       let pongBalance = await pongContract.balanceOf(this.wallet.address);
 
       logger.info(
-        colors.info(
-          `Balance: ${ethers.formatUnits(pingBalance, 18)} PING, ${ethers.formatUnits(pongBalance, 18)} PONG at ${formatAddress(
-            this.wallet.address
-          )}`
+        chalk.green(`? Balance checked: ${ethers.formatUnits(pingBalance, 18)} PING, ${ethers.formatUnits(pongBalance, 18)} PONG`)
+      );
+      console.log(
+        chalk.cyan(
+          `[BALANCE] ?? Saldo di ${this.wallet.address}: ${ethers.formatUnits(pingBalance, 18)} PING, ${ethers.formatUnits(
+            pongBalance,
+            18
+          )} PONG ??`
         )
       );
 
       if (pingBalance === 0n && pongBalance === 0n) {
-        logger.warn(colors.warning(`No PING or PONG tokens to swap for account ${this.accountIndex}`));
+        logger.error(chalk.red(`? ${this.accountIndex} | No tokens to swap. Both PING and PONG balances are zero.`));
+        console.log(chalk.red(`[ERROR] ? No tokens to swap. Both PING and PONG balances are zero. ?`));
         return false;
       }
 
       const { minTxs, maxTxs } = this.config.SOMNIA_NETWORK.SOMNIA_SWAPS.NUMBER_OF_SWAPS;
       const numSwaps = Math.floor(Math.random() * (maxTxs - minTxs + 1)) + minTxs;
-      logger.info(colors.info(`Planning ${numSwaps} swaps for account ${this.accountIndex}`));
+
+      logger.info(chalk.cyan(`?? ${this.accountIndex} | Planning to execute ${numSwaps} swaps`));
+      console.log(chalk.cyan(`[INFO] ?? Planning ${numSwaps} swaps ??`));
 
       let successCount = 0;
 
@@ -247,15 +343,23 @@ class PingPongSwaps {
         if (i > 0) {
           pingBalance = await pingContract.balanceOf(this.wallet.address);
           pongBalance = await pongContract.balanceOf(this.wallet.address);
+
           logger.info(
-            colors.info(
-              `Balance updated: ${ethers.formatUnits(pingBalance, 18)} PING, ${ethers.formatUnits(pongBalance, 18)} PONG`
+            chalk.green(`? Balance updated: ${ethers.formatUnits(pingBalance, 18)} PING, ${ethers.formatUnits(pongBalance, 18)} PONG`)
+          );
+          console.log(
+            chalk.cyan(
+              `[BALANCE] ?? Saldo di ${this.wallet.address}: ${ethers.formatUnits(pingBalance, 18)} PING, ${ethers.formatUnits(
+                pongBalance,
+                18
+              )} PONG ??`
             )
           );
         }
 
         if (pingBalance === 0n && pongBalance === 0n) {
-          logger.warn(colors.warning(`No tokens left to swap. Ending sequence.`));
+          logger.warn(chalk.yellow(`? ${this.accountIndex} | No tokens left to swap. Ending swap sequence.`));
+          console.log(chalk.yellow(`[WARN] ? No tokens left to swap. Ending swap sequence. ?`));
           break;
         }
 
@@ -288,7 +392,8 @@ class PingPongSwaps {
           tokenBalance = pongBalance;
         }
 
-        logger.info(colors.info(`Swap ${i + 1}/${numSwaps}: ${tokenInName} to ${tokenOutName}`));
+        logger.info(chalk.cyan(`?? ${this.accountIndex} | Swap ${i + 1}/${numSwaps}: ${tokenInName} to ${tokenOutName}`));
+        console.log(chalk.blue(`[SWAP] ?? Swap ${i + 1}/${numSwaps}: ${tokenInName} to ${tokenOutName} ??`));
 
         const minAmount = 100;
         const maxAmount = 100;
@@ -297,25 +402,35 @@ class PingPongSwaps {
 
         if (tokenBalance < amountToSwap) {
           logger.warn(
-            colors.warning(
-              `Insufficient ${tokenInName} balance (${ethers.formatUnits(tokenBalance, 18)} < ${randomAmount})`
+            chalk.yellow(
+              `? ${this.accountIndex} | Insufficient ${tokenInName} balance (${ethers.formatUnits(
+                tokenBalance,
+                18
+              )} < ${randomAmount}). Skipping swap.`
             )
+          );
+          console.log(
+            chalk.yellow(`[WARN] ? Insufficient ${tokenInName} balance (${ethers.formatUnits(tokenBalance, 18)} < ${randomAmount}). Skipping swap. ?`)
           );
           continue;
         }
 
-        logger.info(colors.info(`Swapping ${randomAmount} ${tokenInName} to ${tokenOutName}`));
+        logger.info(chalk.cyan(`?? ${this.accountIndex} | Swapping ${randomAmount} ${tokenInName} to ${tokenOutName}`));
+        console.log(chalk.blue(`[SWAP] ?? Swapping ${randomAmount} ${tokenInName} to ${tokenOutName} ??`));
 
         const tokenContract = new ethers.Contract(tokenInAddress, tokenAbi, this.wallet);
         const currentAllowance = await tokenContract.allowance(this.wallet.address, routerAddress);
 
         if (currentAllowance < amountToSwap) {
-          logger.info(colors.info(`Approving ${randomAmount} ${tokenInName} for router`));
+          logger.info(chalk.cyan(`?? ${this.accountIndex} | Approving ${randomAmount} ${tokenInName} for router`));
+          console.log(chalk.cyan(`[APPROVE] ?? Approving ${randomAmount} ${tokenInName} for router ??`));
           const approveTx = await tokenContract.approve(routerAddress, amountToSwap);
           await approveTx.wait();
-          logger.info(colors.success(`Approved ${randomAmount} ${tokenInName}`));
+          logger.info(chalk.green(`? ${this.accountIndex} | Successfully approved ${tokenInName}`));
+          console.log(chalk.green(`[APPROVE] ? Approval for ${randomAmount} ${tokenInName} completed ?`));
         } else {
-          logger.info(colors.success(`No approval needed for ${tokenInName}`));
+          logger.info(chalk.green(`? ${this.accountIndex} | No approval needed for ${tokenInName} (sufficient allowance)`));
+          console.log(chalk.green(`[APPROVE] ? No approval needed for ${tokenInName} (already approved) ?`));
         }
 
         const swapParams = {
@@ -332,13 +447,20 @@ class PingPongSwaps {
 
         try {
           const swapTx = await routerContract.exactInputSingle(swapParams);
-          logger.info(colors.success(`Swap Tx sent: ${swapTx.hash}`));
+          logger.info(chalk.green(`? ${this.accountIndex} | Swap transaction sent: ${swapTx.hash}`));
+          console.log(chalk.green(`[TX] ? Transaction sent, TX Hash: ${swapTx.hash} ?`));
 
           const receipt = await swapTx.wait();
-          logger.info(colors.success(`Swap Tx confirmed: ${EXPLORER_URL_SOMNIA}${receipt.transactionHash}`));
+          logger.info(
+            chalk.green(
+              `? ${this.accountIndex} | Successfully swapped ${randomAmount} ${tokenInName} to ${tokenOutName}. TX: ${EXPLORER_URL_SOMNIA}${receipt.transactionHash}`
+            )
+          );
+          console.log(chalk.green(`[TX] ? Transaction confirmed: ${EXPLORER_URL_SOMNIA}${receipt.transactionHash} ?`));
           successCount++;
         } catch (e) {
-          logger.error(colors.error(`Swap failed: ${e.message}`));
+          logger.error(chalk.red(`? ${this.accountIndex} | Failed to swap ${tokenInName} to ${tokenOutName}: ${e.message}`));
+          console.log(chalk.red(`[SWAP] ? Swap failed: ${e.message} ?`));
           continue;
         }
 
@@ -348,12 +470,13 @@ class PingPongSwaps {
               (this.config.SETTINGS.RANDOM_PAUSE_BETWEEN_ACTIONS[1] -
                 this.config.SETTINGS.RANDOM_PAUSE_BETWEEN_ACTIONS[0]) +
             this.config.SETTINGS.RANDOM_PAUSE_BETWEEN_ACTIONS[0];
-          logger.info(colors.secondary(`Pausing ${pause.toFixed(1)}s before next swap`));
+          logger.info(chalk.cyan(`? ${this.accountIndex} | Waiting ${pause.toFixed(1)} seconds before next swap...`));
+          console.log(chalk.cyan(`? Waiting for next swap...`));
           await new Promise((resolve) => setTimeout(resolve, pause * 1000));
         }
       }
 
-      logger.info(colors.header("=== Ping Pong Swap Completed ==="));
+      console.log(chalk.bgMagenta.white.bold("-------------------[ SWAP COMPLETED ]-------------------"));
       return successCount > 0;
     } catch (e) {
       const pause = Math.floor(
@@ -362,14 +485,15 @@ class PingPongSwaps {
             this.config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]) +
         this.config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]
       );
-      logger.error(colors.error(`Swap failed: ${e.message}. Retrying in ${pause}s`));
+      logger.error(chalk.red(`? ${this.accountIndex} | Ping-pong swap error: ${e.message}. Sleeping ${pause} seconds...`));
+      console.log(chalk.red(`[ERROR] ? Swap bot error: ${e.message} ?`));
       await new Promise((resolve) => setTimeout(resolve, pause * 1000));
       return false;
     }
   }
 }
 
-// Retry utility
+// Retry utilitas (digunakan oleh kedua bot)
 async function retryAsync(fn, attempts = null, delay = 1.0, backoff = 2.0, defaultValue = null) {
   const configAttempts = config.SETTINGS.ATTEMPTS;
   const retryAttempts = attempts !== null ? attempts : configAttempts;
@@ -380,11 +504,17 @@ async function retryAsync(fn, attempts = null, delay = 1.0, backoff = 2.0, defau
       return await fn();
     } catch (e) {
       if (attempt < retryAttempts - 1) {
-        logger.warn(colors.warning(`Attempt ${attempt + 1}/${retryAttempts} failed: ${e.message}. Retrying in ${currentDelay.toFixed(1)}s`));
+        logger.warn(
+          chalk.yellow(
+            `? Attempt ${attempt + 1}/${retryAttempts} failed for ${fn.name}: ${e.message}. Retrying in ${currentDelay.toFixed(1)} seconds...`
+          )
+        );
+        console.log(chalk.yellow(`[RETRY] ? Attempt ${attempt + 1}/${retryAttempts} failed: ${e.message}. Retrying... ?`));
         await new Promise((resolve) => setTimeout(resolve, currentDelay * 1000));
         currentDelay *= backoff;
       } else {
-        logger.error(colors.error(`All ${retryAttempts} attempts failed: ${e.message}`));
+        logger.error(chalk.red(`? All ${retryAttempts} attempts failed for ${fn.name}: ${e.message}`));
+        console.log(chalk.red(`[ERROR] ? All retries failed: ${e.message} ?`));
         return defaultValue;
       }
     }
@@ -392,33 +522,35 @@ async function retryAsync(fn, attempts = null, delay = 1.0, backoff = 2.0, defau
   return defaultValue;
 }
 
-// Run RandomTokenSender
+// Fungsi untuk menjalankan RandomTokenSender
 async function runRandomTokenSender(tokenSender) {
-  logger.info(colors.info("Starting STT Token Sender"));
+  logger.info(chalk.cyan(`?? Starting STT Token Sender`));
+  console.log(chalk.cyan(`[TOKEN SENDER] ?? Starting STT Token Sender ??`));
   const result = await retryAsync(() => tokenSender.sendTokens());
-  logger.info(colors.success(`STT Token Sender result: ${result}`));
+  console.log(chalk.green.bold(`STT Token Sender result: ${result}`));
   return result;
 }
 
-// Run PingPongSwaps
+// Fungsi untuk menjalankan PingPongSwaps
 async function runPingPongSwaps(pingPongSwaps) {
-  logger.info(colors.info("Starting Ping Pong Swaps"));
+  logger.info(chalk.cyan(`?? Starting Ping Pong Swaps`));
+  console.log(chalk.cyan(`[PING PONG SWAPS] ?? Starting Ping Pong Swaps ??`));
   const result = await retryAsync(() => pingPongSwaps.swaps());
-  logger.info(colors.success(`Ping Pong Swaps result: ${result}`));
+  console.log(chalk.green.bold(`Ping Pong Swaps result: ${result}`));
   return result;
 }
 
-// Run combined random mode
+// Fungsi untuk menjalankan kombinasi acak
 async function runCombinedRandom(tokenSender, pingPongSwaps, iterations) {
-  logger.info(colors.header(`=== Combined Random Mode - ${iterations} Iterations ===`));
+  console.log(chalk.bgMagenta.white.bold(`-------------------[ COMBINED RANDOM MODE - ${iterations} ITERATIONS ]-------------------`));
 
   for (let i = 0; i < iterations; i++) {
-    // Check STT balance
+    // Cek saldo STT untuk Token Sender
     const sttBalance = await provider.getBalance(wallet.address);
     const sttBalanceEther = Number(ethers.formatEther(sttBalance));
     const hasSufficientSTT = sttBalanceEther >= config.SETTINGS.MINIMUM_BALANCE;
 
-    // Check PING/PONG balance
+    // Cek saldo PING/PONG untuk Swaps
     const pingContract = new ethers.Contract(
       "0x33e7fab0a8a5da1a923180989bd617c9c2d1c493",
       [
@@ -449,34 +581,34 @@ async function runCombinedRandom(tokenSender, pingPongSwaps, iterations) {
     const pongBalance = await pongContract.balanceOf(wallet.address);
     const hasTokensToSwap = pingBalance > 0n || pongBalance > 0n;
 
-    // Determine possible actions
+    // Tentukan aksi yang mungkin berdasarkan saldo
     const possibleActions = [];
     if (hasSufficientSTT) possibleActions.push("send");
     if (hasTokensToSwap) possibleActions.push("swap");
 
     if (possibleActions.length === 0) {
       logger.error(
-        colors.error(
-          `No actions possible: Insufficient STT (${sttBalanceEther.toFixed(6)} STT) and no PING/PONG tokens`
-        )
+        chalk.red(`? No actions possible: Insufficient STT balance (${sttBalanceEther.toFixed(6)} STT) and no PING/PONG tokens. Stopping.`)
       );
+      console.log(chalk.red(`[ERROR] ? No actions possible. Stopping combined mode. ?`));
       break;
     }
 
-    // Select random action
+    // Pilih aksi secara acak
     const action = possibleActions[Math.floor(Math.random() * possibleActions.length)];
-    logger.info(
-      colors.info(`Iteration ${i + 1}/${iterations}: Running ${action === "send" ? "STT Token Sender" : "Ping Pong Swaps"}`)
+    logger.info(chalk.cyan(`?? Iteration ${i + 1}/${iterations}: Selected action - ${action === "send" ? "STT Token Sender" : "Ping Pong Swaps"}`));
+    console.log(
+      chalk.cyan(`[COMBINED] ?? Iteration ${i + 1}/${iterations}: Running ${action === "send" ? "STT Token Sender" : "Ping Pong Swaps"} ??`)
     );
 
-    // Execute action
+    // Jalankan aksi yang dipilih
     if (action === "send") {
       await runRandomTokenSender(tokenSender);
     } else {
       await runPingPongSwaps(pingPongSwaps);
     }
 
-    // Pause between iterations
+    // Jeda antar iterasi, kecuali untuk iterasi terakhir
     if (i < iterations - 1) {
       const pause = Math.floor(
         Math.random() *
@@ -484,33 +616,34 @@ async function runCombinedRandom(tokenSender, pingPongSwaps, iterations) {
             config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]) +
         config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]
       );
-      logger.info(colors.secondary(`Pausing ${pause}s before next iteration`));
+      logger.info(chalk.cyan(`? Waiting ${pause} seconds before next iteration...`));
+      console.log(chalk.cyan(`? Waiting for next iteration...`));
       await new Promise((resolve) => setTimeout(resolve, pause * 1000));
     }
   }
 
-  logger.info(colors.header("=== Combined Random Mode Completed ==="));
+  console.log(chalk.bgMagenta.white.bold("-------------------[ COMBINED RANDOM MODE COMPLETED ]-------------------"));
 }
 
-// Main function with menu
+// Fungsi utama dengan menu
 (async () => {
   try {
-    logger.info(colors.header("=== Combined Bot Menu ==="));
+    console.log(chalk.bgMagenta.white.bold("-------------------[ COMBINED BOT MENU ]-------------------"));
 
-    // Mode selection
+    // Menu untuk memilih mode
     const modeResponse = await prompts({
       type: "select",
       name: "mode",
-      message: colors.info("Choose bot mode:"),
+      message: chalk.cyan("Choose the bot mode to run:"),
       choices: [
-        { title: "STT Token Sender", value: "random" },
-        { title: "Ping Pong Swaps", value: "ping" },
-        { title: "Combined Random (Send + Swap)", value: "both" },
+        { title: "Run STT Token Sender (random.js)", value: "random" },
+        { title: "Run Ping Pong Swaps (ping.js)", value: "ping" },
+        { title: "Run Combined Random (Random + Ping)", value: "both" },
       ],
     });
 
     if (!modeResponse.mode) {
-      logger.error(colors.error("Bot stopped: No mode selected"));
+      console.log(chalk.red("Bot stopped. No mode selected."));
       return;
     }
 
@@ -518,35 +651,37 @@ async function runCombinedRandom(tokenSender, pingPongSwaps, iterations) {
     const pingPongSwaps = new PingPongSwaps(wallet);
 
     if (modeResponse.mode === "random") {
-      // Prompt for loop count
+      // Prompt untuk jumlah loop Token Sender (0 untuk unlimited)
       const randomLoopResponse = await prompts({
         type: "number",
         name: "loopCount",
-        message: colors.info("Enter STT Token Sender loop count (0 for unlimited):"),
+        message: chalk.cyan("How many times do you want to loop the STT Token Sender? (Enter 0 for unlimited):"),
         validate: (value) => value >= 0 ? true : "Please enter a non-negative number",
       });
 
-      logger.info(colors.header("=== STT Token Sender - Unlimited Loop ==="));
-      logger.info(colors.info("Press Ctrl+C to stop"));
-
+      console.log(chalk.bgMagenta.white.bold("-------------------[ STT TOKEN SENDER BOT - UNLIMITED LOOP ]-------------------"));
+      console.log(chalk.cyan("?? Press Ctrl+C to stop the bot at any time."));
       let currentLoop = 0;
+
       while (randomLoopResponse.loopCount === 0 || currentLoop < randomLoopResponse.loopCount) {
         currentLoop++;
-        logger.info(colors.info(`Starting send loop ${currentLoop}`));
+        logger.info(chalk.cyan(`?? Starting send loop ${currentLoop}`));
+        console.log(chalk.cyan(`[LOOP] ?? Starting send loop ${currentLoop} ??`));
 
         const balance = await provider.getBalance(wallet.address);
         const balanceEther = Number(ethers.formatEther(balance));
         if (balanceEther < config.SETTINGS.MINIMUM_BALANCE) {
           logger.error(
-            colors.error(
-              `Insufficient balance (${balanceEther.toFixed(6)} STT < ${config.SETTINGS.MINIMUM_BALANCE} STT)`
+            chalk.red(
+              `? ${accountIndex} | Insufficient balance (${balanceEther.toFixed(6)} STT < ${config.SETTINGS.MINIMUM_BALANCE} STT). Stopping bot.`
             )
           );
+          console.log(chalk.red(`[ERROR] ? Insufficient STT balance. Stopping bot. ?`));
           break;
         }
 
         const result = await retryAsync(() => tokenSender.sendTokens());
-        logger.info(colors.success(`Send loop ${currentLoop} result: ${result}`));
+        console.log(chalk.green.bold(`Send loop ${currentLoop} result: ${result}`));
 
         if (randomLoopResponse.loopCount === 0 || currentLoop < randomLoopResponse.loopCount) {
           const pause = Math.floor(
@@ -554,28 +689,30 @@ async function runCombinedRandom(tokenSender, pingPongSwaps, iterations) {
               (config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[1] - config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]) +
             config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]
           );
-          logger.info(colors.secondary(`Pausing ${pause}s before next loop`));
+          logger.info(chalk.cyan(`? Waiting ${pause} seconds before next loop...`));
+          console.log(chalk.cyan(`? Waiting for next loop...`));
           await new Promise((resolve) => setTimeout(resolve, pause * 1000));
         }
       }
 
-      logger.info(colors.header("=== STT Token Sender Stopped ==="));
+      console.log(chalk.bgMagenta.white.bold("-------------------[ TOKEN SENDER STOPPED ]-------------------"));
     } else if (modeResponse.mode === "ping") {
-      // Prompt for loop count
+      // Prompt untuk jumlah loop Ping Pong Swaps
       const pingLoopResponse = await prompts({
         type: "number",
         name: "loopCount",
-        message: colors.info("Enter Ping Pong Swaps loop count (positive number):"),
+        message: chalk.cyan("How many times do you want to loop the Ping Pong Swaps? (Enter a positive number):"),
         validate: (value) => value > 0 ? true : "Please enter a positive number",
       });
 
-      logger.info(colors.header(`=== Starting ${pingLoopResponse.loopCount} Swap Loops ===`));
+      console.log(chalk.bgMagenta.white.bold(`-------------------[ STARTING ${pingLoopResponse.loopCount} SWAP LOOPS ]-------------------`));
 
       for (let i = 0; i < pingLoopResponse.loopCount; i++) {
-        logger.info(colors.info(`Starting swap loop ${i + 1}/${pingLoopResponse.loopCount}`));
+        logger.info(chalk.cyan(`?? Starting swap loop ${i + 1}/${pingLoopResponse.loopCount}`));
+        console.log(chalk.cyan(`[LOOP] ?? Starting swap loop ${i + 1}/${pingLoopResponse.loopCount} ??`));
 
         const result = await retryAsync(() => pingPongSwaps.swaps());
-        logger.info(colors.success(`Swap loop ${i + 1} result: ${result}`));
+        console.log(chalk.green.bold(`Swap loop ${i + 1} result: ${result}`));
 
         if (i < pingLoopResponse.loopCount - 1) {
           const pause = Math.floor(
@@ -584,26 +721,27 @@ async function runCombinedRandom(tokenSender, pingPongSwaps, iterations) {
                 config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]) +
             config.SETTINGS.PAUSE_BETWEEN_ATTEMPTS[0]
           );
-          logger.info(colors.secondary(`Pausing ${pause}s before next loop`));
+          logger.info(chalk.cyan(`? Waiting ${pause} seconds before next loop...`));
+          console.log(chalk.cyan(`? Waiting for next loop...`));
           await new Promise((resolve) => setTimeout(resolve, pause * 1000));
         }
       }
 
-      logger.info(colors.header("=== All Swap Loops Completed ==="));
+      console.log(chalk.bgMagenta.white.bold("-------------------[ ALL SWAP LOOPS COMPLETED ]-------------------"));
     } else if (modeResponse.mode === "both") {
-      // Prompt for iterations
+      // Prompt untuk jumlah iterasi kombinasi acak
       const combinedResponse = await prompts({
         type: "number",
         name: "iterations",
-        message: colors.info("Enter number of random actions (send or swap):"),
+        message: chalk.cyan("How many random actions (send or swap) do you want to perform? (Enter a positive number):"),
         validate: (value) => value > 0 ? true : "Please enter a positive number",
       });
 
       await runCombinedRandom(tokenSender, pingPongSwaps, combinedResponse.iterations);
     }
 
-    logger.info(colors.header("=== Bot Execution Completed ==="));
+    console.log(chalk.bgMagenta.white.bold("-------------------[ BOT EXECUTION COMPLETED ]-------------------"));
   } catch (e) {
-    logger.error(colors.error(`Bot error: ${e.message}`));
+    console.error(chalk.red.bold(`Error: ${e.message}`));
   }
 })();
